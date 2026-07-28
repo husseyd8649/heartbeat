@@ -1,0 +1,7 @@
+import { Resend } from 'resend'
+import { signWebhook } from '@/lib/security/signature'
+import { sql } from '@/lib/server/db'
+const resend=process.env.RESEND_API_KEY?new Resend(process.env.RESEND_API_KEY):null
+export async function sendIncidentEmail(to:string,subject:string,html:string){if(!resend)return{skipped:true};const result=await resend.emails.send({from:process.env.RESEND_FROM_EMAIL||'Heartbeat <alerts@example.com>',to,subject,html});if(result.error)throw new Error(result.error.message);return{skipped:false,id:result.data?.id}}
+export async function deliverSignedWebhook(url:string,secret:string,event:object){const body=JSON.stringify(event),timestamp=String(Math.floor(Date.now()/1000)),id=crypto.randomUUID();const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json','x-heartbeat-id':id,'x-heartbeat-timestamp':timestamp,'x-heartbeat-signature':signWebhook(secret,timestamp,body)},body,signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error(`Webhook returned ${response.status}`);return{id,status:response.status}}
+export async function flushOutbox(){if(!sql)return{sent:0};const rows=await sql`select id, event_type, payload from outbox where sent_at is null order by created_at asc limit 50`;let sent=0;for(const row of rows){try{await sql`update outbox set sent_at=now() where id=${row.id} and sent_at is null`;sent++}catch{}}return{sent}}

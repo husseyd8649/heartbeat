@@ -1,0 +1,3 @@
+import { checkQueue, defaultJobOptions } from '@/lib/server/queue'
+import { listMonitors } from '@/lib/server/repository'
+export async function enqueueDueMonitors(org:string){const monitors=await listMonitors(org);if(!process.env.REDIS_URL)return{queued:0,mode:'direct'};const queue=checkQueue();let queued=0;for(const m of monitors.filter(x=>x.enabled&&Date.parse(x.nextRunAt)<=Date.now()).slice(0,100)){await queue.add('check',{monitorId:m.id,organizationId:org},{...defaultJobOptions,jobId:`check:${m.id}:${Math.floor(Date.now()/60000)}`});queued++}await queue.close();return{queued,mode:'bullmq'}}
